@@ -1,0 +1,88 @@
+- name: debug jailname
+  debug:
+    var: jail
+
+- name: debug parent
+  debug:
+    var: ansible_host
+
+- name: zfs dataset for the jail
+  zfs:
+    name: "{{ jail_root.dataset }}/{{ jail }}"
+    state: present
+
+- name: debug jail
+  debug:
+    var: hostvars[jail]
+
+- name: per jail specific configuration in jail.conf
+  blockinfile:
+    path: /etc/jail.conf
+    marker: "# {mark} ANSIBLE MANAGED: {{ jail }}"
+    block: |
+      {{ jail }} {
+        host.hostname = "{{ hostvars[jail].jail_hostname | default(jail) }}";
+      {% for item in hostvars[jail].get('jail_mounts',[]) %}
+        mount += "{{ item }}";
+      {% endfor %}
+      {% if hostvars[jail].jail_vnet is iterable and hostvars[jail].jail_vnet is not string %}
+      {% for vnetif in hostvars[jail].jail_vnet %}
+        vnet.interface {% if loop.first %}={% else %}+={% endif %} "e{{ loop.index0 }}b_{{ jail }}";
+      {% endfor %}
+        exec.prestart += "jib addm -b _br {{ jail }} \!{{ hostvars[jail].jail_vnet|join(' \!') }}";
+      {% else %}
+        vnet.interface = "e0b_{{ jail }}";
+        exec.prestart += "jib addm {{ jail }} {{ hostvars[jail].jail_vnet }}";
+        # else branch
+      {% endif %}
+        exec.poststop += "jib destroy {{ jail }}";
+      }
+
+# vnet.interface = "{{ hostvars[jail].jail_inet }}b";
+
+- name: bsdinstall template script
+  copy:
+    dest: "{{ jail_root.mountpoint }}/.template/{{ jail }}"
+    content: |
+      DISTRIBUTIONS="base.txz"
+      export nonInteractive="YES"
+      #!/bin/sh
+      pkg install -y {{ jail_python | default('python310') }}
+      sysrc sshd_enable="YES"
+      {% for network in hostvars[jail].jail_inet %}
+      sysrc ifconfig_e{{ loop.index0 }}b_{{ jail }}="{{ network }}"
+      {% endfor %}
+      sysrc defaultrouter={{ hostvars[jail].jail_defaultrouter }}
+
+- name: bsdinstall jails
+  shell: bsdinstall jail "{{ jail_root.mountpoint }}/{{ jail }}"
+  environment:
+    SCRIPT: "{{ jail_root.mountpoint }}/.template/{{ jail }}"
+  args:
+    creates: "{{ jail_root.mountpoint }}/{{ jail }}/bin"
+
+- name: network in the jail
+  community.general.sysrc:
+    jail: "{{ jail }}"
+    name: "ifconfig_e{{ index0 }}b_{{ jail }}"
+    value: "{{ item }}"
+    state: present
+  with_items: "{{ hostvars[jail].jail_inet }}"
+  loop_control:
+    index_var: index0
+
+- name: name resolution in jail
+  copy:
+    dest: "{{ jail_root.mountpoint }}/{{ jail }}/etc/resolv.conf"
+    mode: 644
+    owner: root
+    group: 0
+    content: |
+      search {{ hostvars[jail].jail_ns_search }}
+      {% if hostvars[jail].jail_ns_server is iterable and hostvars[jail].jail_ns_server is not string %}
+      {% for ns in hostvars[jail].jail_ns_server %}
+      nameserver {{ ns }}
+      {% endfor %}
+      {% else %}
+      nameserver {{ hostvars[jail].jail_ns_server }}
+      {% endif %}

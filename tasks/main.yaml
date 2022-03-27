@@ -1,0 +1,52 @@
+- name: jail root dataset
+  zfs:
+    name: "{{ jail_root.dataset }}"
+    state: present
+    extra_zfs_properties:
+      mountpoint: "{{ jail_root.mountpoint }}"
+
+- name: templates directory
+  file:
+    path: "{{ jail_root.mountpoint }}/.template"
+    state: directory
+    owner: root
+    group: 0
+    mode: 0700
+
+- name: jail.conf generic part
+  blockinfile:
+    path: /etc/jail.conf
+    create: yes
+    marker: "# {mark} ANSIBLE MANAGED: default"
+    block: |
+      path = "{{ jail_root.mountpoint }}/$name";
+      exec.clean;
+      exec.system_user = "root";
+      exec.jail_user = "root";
+      exec.consolelog = "/var/log/jail_${name}_console.log";
+      vnet;
+      exec.start = "/bin/sh /etc/rc";
+      exec.stop = "/bin/sh /etc/rc.shutdown";
+      mount.devfs;
+
+
+- name: check if automated jail install is already available in bsdinstall jail script
+  shell: "grep SCRIPT /usr/libexec/bsdinstall/jail"
+  register: scripted_jail
+  ignore_errors: true
+  changed_when: false
+
+- name: patch jail bsdinstall-subcommand if needed
+  ansible.posix.patch:
+    src: jail.patch
+    basedir: /usr/libexec/bsdinstall
+    strip: 4
+  when: scripted_jail.rc != 0
+
+- name: iterate through jails on this host
+  include_tasks: jail.yaml
+  with_inventory_hostnames:
+    - jails
+  loop_control:
+    loop_var: jail
+  when: hostvars[jail].get('jail_parent') == ansible_host
