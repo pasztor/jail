@@ -43,6 +43,13 @@
     strip: 4
   when: scripted_jail.rc != 0
 
+- name: install jib script
+  copy:
+    src: /usr/share/examples/jails/jib
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: 0755
+
 - name: iterate through jails on this host
   include_tasks: jail.yaml
   with_inventory_hostnames:

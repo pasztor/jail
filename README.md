@@ -71,3 +71,7 @@ Author Information
 ------------------
 
 source url: https://github.com/pasztor/jail
+Most of the idea and hints are coming from this tutorial: 
+- https://eoli3n.eu.org/2021/06/08/jails-part-1.html
+- https://eoli3n.eu.org/2021/06/09/jails-part-2.html
+- https://eoli3n.eu.org/2021/06/14/jails-part-3.html
