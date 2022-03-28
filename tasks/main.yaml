@@ -46,7 +46,7 @@
 - name: install jib script
   copy:
     src: /usr/share/examples/jails/jib
-    dest: /usr/local/bin/
+    dest: /usr/local/sbin/
     remote_src: yes
     mode: 0755
 
