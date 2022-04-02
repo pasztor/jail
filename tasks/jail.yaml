@@ -53,7 +53,7 @@
       sysrc ifconfig_e{{ loop.index0 }}b_{{ jail }}="{{ network }}"
       {% endfor %}
       sysrc defaultrouter={{ hostvars[jail].jail_defaultrouter }}
-      echo "{{ hostvars[jail].get('ansible_user',ansible_user_id) }}:{{ hostvars[jail].get('ansible_user_uid','') }}:{{ hostvars[jail].get('ansible_user_uid','') }}::::{{ hostvars[jail].get('ansible_user_gecos','') }}:::" | adduser -w
+      echo "{{ hostvars[jail].get('ansible_user',ansible_user_id) }}:{{ hostvars[jail].get('ansible_user_uid','') }}:{{ hostvars[jail].get('ansible_user_uid','') }}::::{{ hostvars[jail].get('ansible_user_gecos','') }}:::" | adduser -w no -f -
       pkg install -y sudo
       echo "{{ hostvars[jail].get('ansible_user', ansible_user_id) }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}
       install -d -m 700 /home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh
