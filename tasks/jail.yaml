@@ -58,6 +58,7 @@
       echo "{{ hostvars[jail].get('ansible_user', ansible_user_id) }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}
       install -d -m 700 /home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh
       echo "{{ ansible_ssh_key }}" >/home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh/authorized_keys
+      chown -R{{ hostvars[jail].get('ansible_user', ansible_user_id) }}:{{ hostvars[jail].get('ansible_user', ansible_user_id) }} /home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh
 
 - name: bsdinstall jails
   shell: bsdinstall jail "{{ jail_root.mountpoint }}/{{ jail }}"
