@@ -47,7 +47,7 @@
       DISTRIBUTIONS="base.txz"
       export nonInteractive="YES"
       #!/bin/sh
-      pkg install -y {{ jail_python | default('python310') }}
+      pkg install -y {{ jail_python | default('python3') }}
       sysrc sshd_enable="YES"
       {% for network in hostvars[jail].jail_inet %}
       sysrc ifconfig_e{{ loop.index0 }}b_{{ jail }}="{{ network }}"
