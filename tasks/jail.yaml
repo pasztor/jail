@@ -35,13 +35,15 @@
     name: "{{ jail.root.dataset }}/{{ jailname }}"
     state: present
 
-- name: create directories for mount on host side
+- name: create directories for mount on host side # noqa risky-file-permissions
+  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
   file:
     path: "{{ item[0] if item is iterable and item is not string else item }}"
     state: directory
   loop: "{{ jailcfg.mounts }}"
 
-- name: create directories for mount on jail side
+- name: create directories for mount on jail side # noqa risky-file-permissions
+  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
   file:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}{{ item[1] if item is iterable and item is not string else item }}"
     state: directory
@@ -84,6 +86,7 @@
 - name: bsdinstall template script
   copy:
     dest: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
+    mode: 0644
     content: |
       DISTRIBUTIONS="base.txz"
       export nonInteractive="YES"
@@ -101,7 +104,8 @@
       echo "{{ jail.ssh_key }}" >/home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh/authorized_keys
       chown -R {{ hostvars[jailname].get('ansible_user', jail.user) }}:{{ hostvars[jailname].get('ansible_user', jail.user) }} /home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh
 
-- name: bsdinstall jails
+- name: bsdinstall jails # noqa command-instead-of-shell
+  # You can't pass environemtn variables using the command module
   shell: bsdinstall jail "{{ jail.root.mountpoint }}/{{ jailname }}"
   environment:
     SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
@@ -121,7 +125,7 @@
 - name: name resolution in jail
   copy:
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/resolv.conf"
-    mode: 644
+    mode: 0644
     owner: root
     group: 0
     content: |

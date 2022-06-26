@@ -16,6 +16,7 @@
 - name: jail.conf generic part
   blockinfile:
     path: /etc/jail.conf
+    mode: 0644
     create: yes
     marker: "# {mark} ANSIBLE MANAGED: default"
     block: |
@@ -32,7 +33,7 @@
 
 
 - name: check if automated jail install is already available in bsdinstall jail script
-  shell: "grep SCRIPT /usr/libexec/bsdinstall/jail"
+  command: "grep SCRIPT /usr/libexec/bsdinstall/jail"
   register: scripted_jail
   ignore_errors: true
   changed_when: false

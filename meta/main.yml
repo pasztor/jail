@@ -1,6 +1,8 @@
 galaxy_info:
   author: PASZTOR Gyorgy
   description: Managing creation of jails on freebsd hosts
+  role_name: jail
+  namespace: pasztor
 
   # If the issue tracker for your role is not on github, uncomment the
   # next line and provide a value
