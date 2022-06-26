@@ -1,13 +1,13 @@
 - name: jail root dataset
   zfs:
-    name: "{{ jail_root.dataset }}"
+    name: "{{ jail.root.dataset }}"
     state: present
     extra_zfs_properties:
-      mountpoint: "{{ jail_root.mountpoint }}"
+      mountpoint: "{{ jail.root.mountpoint }}"
 
 - name: templates directory
   file:
-    path: "{{ jail_root.mountpoint }}/.template"
+    path: "{{ jail.root.mountpoint }}/.template"
     state: directory
     owner: root
     group: 0
@@ -19,7 +19,7 @@
     create: yes
     marker: "# {mark} ANSIBLE MANAGED: default"
     block: |
-      path = "{{ jail_root.mountpoint }}/$name";
+      path = "{{ jail.root.mountpoint }}/$name";
       exec.clean;
       exec.system_user = "root";
       exec.jail_user = "root";
@@ -28,6 +28,7 @@
       exec.start = "/bin/sh /etc/rc";
       exec.stop = "/bin/sh /etc/rc.shutdown";
       mount.devfs;
+      host.hostname = "$name";
 
 
 - name: check if automated jail install is already available in bsdinstall jail script
@@ -53,7 +54,7 @@
 - name: iterate through jails on this host
   include_tasks: jail.yaml
   with_inventory_hostnames:
-    - jails
+    - "{{ jail.child_group }}"
   loop_control:
-    loop_var: jail
-  when: hostvars[jail].get('jail_parent') == ansible_host
+    loop_var: jailname
+  when: hostvars[jailname].get('jail', {}).get('parent', ansible_host) == ansible_host

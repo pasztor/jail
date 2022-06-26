@@ -1,94 +1,135 @@
 - name: debug jailname
   debug:
-    var: jail
+    var: jailname
+  tags:
+    - debug
+    - never
+
+- name: set jail variables from jails hostvars
+  set_fact:
+    jailcfg: "{{ hostvars[jailname].get('jail') }}"
+
+- name: debug jailcfg
+  debug:
+    var: jailcfg
+  tags:
+    - debug
+    - never
 
 - name: debug parent
   debug:
     var: ansible_host
-
-- name: zfs dataset for the jail
-  zfs:
-    name: "{{ jail_root.dataset }}/{{ jail }}"
-    state: present
+  tags:
+    - debug
+    - never
 
 - name: debug jail
   debug:
-    var: hostvars[jail]
+    var: hostvars[jailname]
+  tags:
+    - debug
+    - never
+
+- name: zfs dataset for the jail
+  zfs:
+    name: "{{ jail.root.dataset }}/{{ jailname }}"
+    state: present
+
+- name: create directories for mount on host side
+  file:
+    path: "{{ item[0] if item is iterable and item is not string else item }}"
+    state: directory
+  loop: "{{ jailcfg.mounts }}"
+
+- name: create directories for mount on jail side
+  file:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}{{ item[1] if item is iterable and item is not string else item }}"
+    state: directory
+  loop: "{{ jailcfg.mounts }}"
 
 - name: per jail specific configuration in jail.conf
   blockinfile:
     path: /etc/jail.conf
-    marker: "# {mark} ANSIBLE MANAGED: {{ jail }}"
+    marker: "# {mark} ANSIBLE MANAGED: {{ jailname }}"
     block: |
-      {{ jail }} {
-        host.hostname = "{{ hostvars[jail].jail_hostname | default(jail) }}";
-      {% for item in hostvars[jail].get('jail_mounts',[]) %}
-        mount += "{{ item }}";
+      {{ jailname }} {
+      {% if jailcfg.hostname is defined %}
+        host.hostname = "{{ jailcfg.hostname }}";
+      {% endif %}
+      {% for item in jailcfg.get('mounts',[]) %}
+      {%  if item is not string %}
+        mount += "{{ item[0] }} {{ jail.root.mountpoint }}/{{ jailname }}{{ item[-1] }} nullfs defaults 0 0";
+      {%  else %}
+        mount += "{{ item }} {{ jail.root.mountpoint }}/{{ jailname }}{{ item }} nullfs defaults 0 0";
+      {%  endif %}
       {% endfor %}
-      {% if hostvars[jail].jail_vnet is iterable and hostvars[jail].jail_vnet is not string %}
-      {% for vnetif in hostvars[jail].jail_vnet %}
-        vnet.interface {% if loop.first %}={% else %}+={% endif %} "e{{ loop.index0 }}b_{{ jail }}";
+      {% if jailcfg.vnet is iterable and jailcfg.vnet is not string %}
+      {% for vnetif in jailcfg.vnet %}
+        vnet.interface {% if loop.first %}={% else %}+={% endif %} "e{{ loop.index0 }}b_{{ jailname }}";
       {% endfor %}
-        exec.prestart += "jib addm -b _br {{ jail }} \!{{ hostvars[jail].jail_vnet|join(' \!') }}";
+        exec.prestart += "jib addm -b _br {{ jailname }} \!{{ jailcfg.vnet|join(' \!') }}";
       {% else %}
-        vnet.interface = "e0b_{{ jail }}";
-        exec.prestart += "jib addm {{ jail }} {{ hostvars[jail].jail_vnet }}";
+        vnet.interface = "e0b_{{ jailname }}";
+        exec.prestart += "jib addm {{ jailname }} {{ jailcfg.vnet }}";
         # else branch
       {% endif %}
-        exec.poststop += "jib destroy {{ jail }}";
+        exec.poststop += "jib destroy {{ jailname }}";
+      {% for key, value in jailcfg.custom.items() %}
+        {{ key }} = {% if value is not number %}"{% endif %}{{ value }}{% if value is not number %}"{% endif %};
+      {% endfor %}
       }
 
-# vnet.interface = "{{ hostvars[jail].jail_inet }}b";
+# vnet.interface = "{{ hostvars[jailname].jail.inet }}b";
 
 - name: bsdinstall template script
   copy:
-    dest: "{{ jail_root.mountpoint }}/.template/{{ jail }}"
+    dest: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
     content: |
       DISTRIBUTIONS="base.txz"
       export nonInteractive="YES"
       #!/bin/sh
-      pkg install -y {{ jail_python | default('python3') }}
+      pkg install -y {{ jail.python | default('python3') }}
       sysrc sshd_enable="YES"
-      {% for network in hostvars[jail].jail_inet %}
-      sysrc ifconfig_e{{ loop.index0 }}b_{{ jail }}="{{ network }}"
+      {% for network in jailcfg.inet %}
+      sysrc ifconfig_e{{ loop.index0 }}b_{{ jailname }}="{{ network }}"
       {% endfor %}
-      sysrc defaultrouter={{ hostvars[jail].jail_defaultrouter }}
-      echo "{{ hostvars[jail].get('ansible_user',ansible_user_id) }}:{{ hostvars[jail].get('ansible_user_uid','') }}:{{ hostvars[jail].get('ansible_user_uid','') }}::::{{ hostvars[jail].get('ansible_user_gecos','') }}:::" | adduser -w no -f -
+      sysrc defaultrouter={{ jailcfg.defaultrouter }}
+      echo "{{ hostvars[jailname].get('ansible_user', jail.user) }}:{{ hostvars[jailname].get('ansible_user_uid','') }}:{{ hostvars[jailname].get('ansible_user_uid','') }}::::{{ hostvars[jailname].get('ansible_user_gecos','') }}:::" | adduser -w no -f -
       pkg install -y sudo
-      echo "{{ hostvars[jail].get('ansible_user', ansible_user_id) }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}
-      install -d -m 700 /home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh
-      echo "{{ ansible_ssh_key }}" >/home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh/authorized_keys
-      chown -R {{ hostvars[jail].get('ansible_user', ansible_user_id) }}:{{ hostvars[jail].get('ansible_user', ansible_user_id) }} /home/{{ hostvars[jail].get('ansible_user', ansible_user_id) }}/.ssh
+      echo "{{ hostvars[jailname].get('ansible_user', jail.user) }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ hostvars[jailname].get('ansible_user', jail.user) }}
+      install -d -m 700 /home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh
+      echo "{{ jail.ssh_key }}" >/home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh/authorized_keys
+      chown -R {{ hostvars[jailname].get('ansible_user', jail.user) }}:{{ hostvars[jailname].get('ansible_user', jail.user) }} /home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh
 
 - name: bsdinstall jails
-  shell: bsdinstall jail "{{ jail_root.mountpoint }}/{{ jail }}"
+  shell: bsdinstall jail "{{ jail.root.mountpoint }}/{{ jailname }}"
   environment:
-    SCRIPT: "{{ jail_root.mountpoint }}/.template/{{ jail }}"
+    SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
   args:
-    creates: "{{ jail_root.mountpoint }}/{{ jail }}/bin"
+    creates: "{{ jail.root.mountpoint }}/{{ jailname }}/bin"
 
 - name: network in the jail
   community.general.sysrc:
-    jail: "{{ jail }}"
-    name: "ifconfig_e{{ index0 }}b_{{ jail }}"
+    jail: "{{ jailname }}"
+    name: "ifconfig_e{{ index0 }}b_{{ jailname }}"
     value: "{{ item }}"
     state: present
-  with_items: "{{ hostvars[jail].jail_inet }}"
+  with_items: "{{ jailcfg.inet }}"
   loop_control:
     index_var: index0
 
 - name: name resolution in jail
   copy:
-    dest: "{{ jail_root.mountpoint }}/{{ jail }}/etc/resolv.conf"
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/resolv.conf"
     mode: 644
     owner: root
     group: 0
     content: |
-      search {{ hostvars[jail].jail_ns_search }}
-      {% if hostvars[jail].jail_ns_server is iterable and hostvars[jail].jail_ns_server is not string %}
-      {% for ns in hostvars[jail].jail_ns_server %}
+      search {{ jailcfg.ns_search }}
+      {% if jailcfg.ns_server is iterable and jailcfg.ns_server is not string %}
+      {% for ns in jailcfg.ns_server %}
       nameserver {{ ns }}
       {% endfor %}
       {% else %}
-      nameserver {{ hostvars[jail].jail_ns_server }}
+      nameserver {{ jailcfg.ns_server }}
       {% endif %}
