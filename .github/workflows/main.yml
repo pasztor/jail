@@ -3,7 +3,8 @@ name: GitHub Action
 
 on:
   push:
-    branches: [ "main" ]
+    tags:
+      - '*'
 
 jobs:
   build:
