@@ -43,17 +43,19 @@ Specifically, you must create a variable called `jail` and every jail related se
 Though the jail role goes through every singe host in the above defined group within your inventory, there is a way to add a dobule-check step:
 
 If the jail configuration has a `parent` key defined, and the value of the given key is different from the parent hosts's hostname, than that jail will be skipped in processing.
+
 Possible variables for the jails:
-`parent`: Which `ansible_host` is the host of this jail. default: the host we are running steps on.
-`vnet`: A string or list of interface names which will have a bridge with the jails epair interface
-`inet`: network configuration line (or lines) of the interfaces of the epair interfaces. This goes right away to the jail's rc.conf into the respective line or lines. N.B. If an array of interfaces are defined, than vnet[0]'s inet config within the jail is inet[0], and so on...
-`defaultrouter`: defaultrouter of the jail
-`ns_search`: This string will be appeneded after the `search` keyword in the guest's resolv.conf
-`ns_server`: ip, or list of ips of nameservers for the jail.
-`mounts`: list of mount points. A list element is either a simple directory name. In this case the directory must be the same on the host and within the jail. Or a list of two elements: the directory name on the host, and the directory name, how you can see it within the jail. Prefix of the jail's root must be omited.
-`custom`: custom jail configurations can be added here, eg. enabling sysv ipc.
+- `parent`: Which `ansible_host` is the host of this jail. default: the host we are running steps on.
+- `vnet`: A string or list of interface names which will have a bridge with the jails epair interface
+- `inet`: network configuration line (or lines) of the interfaces of the epair interfaces. This goes right away to the jail's rc.conf into the respective line or lines. N.B. If an array of interfaces are defined, than vnet[0]'s inet config within the jail is inet[0], and so on...
+- `defaultrouter`: defaultrouter of the jail
+- `ns_search`: This string will be appeneded after the `search` keyword in the guest's resolv.conf
+- `ns_server`: ip, or list of ips of nameservers for the jail.
+- `mounts`: list of mount points. A list element is either a simple directory name. In this case the directory must be the same on the host and within the jail. Or a list of two elements: the directory name on the host, and the directory name, how you can see it within the jail. Prefix of the jail's root must be omited.
+- `custom`: custom jail configurations can be added here, eg. enabling sysv ipc.
 
 There is one important configuration item in the jails' hostconfig: the `ansible_user`. With this you can override the username from the host's configuration on a per-jail basis.
+
 example jail's host vars (e.g.: `host_vars/beelzebub.yaml`) :
 ```
 jail:
@@ -92,6 +94,7 @@ Tags
 ----
 
 Rest of the tasks don't have any tags. Though at certain points for debug reasons a few variables can be displayed if you allow the debug tags to run too.
+
 If you only provide the ``--tags debug`` to ansible-playbook, than no task will run. In order to run the usual steps and the debug tags, you should use the ``--tags all,debug`` parameters to allow these debug steps to run.
 
 
