@@ -5,7 +5,7 @@
     - debug
     - never
 
-- name: set jail variables from jails hostvars
+- name: set jail variables from jails hostvars[{{ jailname }}]
   set_fact:
     jailcfg: "{{ hostvars[jailname].get('jail') }}"
 
@@ -33,21 +33,9 @@
 - name: zfs dataset for the jail
   zfs:
     name: "{{ jail.root.dataset }}/{{ jailname }}"
+    extra_zfs_properties:
+      quota: "{{ jailcfg.quota | default(omit) }}"
     state: present
-
-- name: create directories for mount on host side # noqa risky-file-permissions
-  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
-  file:
-    path: "{{ item[0] if item is iterable and item is not string else item }}"
-    state: directory
-  loop: "{{ jailcfg.mounts }}"
-
-- name: create directories for mount on jail side # noqa risky-file-permissions
-  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
-  file:
-    path: "{{ jail.root.mountpoint }}/{{ jailname }}{{ item[1] if item is iterable and item is not string else item }}"
-    state: directory
-  loop: "{{ jailcfg.mounts }}"
 
 - name: per jail specific configuration in jail.conf
   blockinfile:
@@ -65,20 +53,29 @@
         mount += "{{ item }} {{ jail.root.mountpoint }}/{{ jailname }}{{ item }} nullfs defaults 0 0";
       {%  endif %}
       {% endfor %}
-      {% if jailcfg.vnet is iterable and jailcfg.vnet is not string %}
-      {% for vnetif in jailcfg.vnet %}
+      {% if jailcfg.vnet is defined %}
+      {%   if jailcfg.vnet is iterable and jailcfg.vnet is not string %}
+      {%     for vnetif in jailcfg.vnet %}
         vnet.interface {% if loop.first %}={% else %}+={% endif %} "e{{ loop.index0 }}b_{{ jailname }}";
-      {% endfor %}
-        exec.prestart += "jib addm -b _br {{ jailname }} \!{{ jailcfg.vnet|join(' \!') }}";
-      {% else %}
+      {%     endfor %}
+        exec.prestart += "jib addm -b _br {{ jailname }} \!{{ jailcfg.vnet | join(' \!') }}";
+      {%   else %}
         vnet.interface = "e0b_{{ jailname }}";
         exec.prestart += "jib addm {{ jailname }} {{ jailcfg.vnet }}";
-        # else branch
-      {% endif %}
+      {%   endif %}
         exec.poststop += "jib destroy {{ jailname }}";
-      {% for key, value in jailcfg.custom.items() %}
+      {% endif %}
+      {% if jailcfg.custom is defined %}
+      {%   for key, value in jailcfg.custom.items() %}
+      {%     if value is iterable and value is not string %}
+      {%       for ivalue in value %}
+        {{ key }} += {% if ivalue is not number %}"{% endif %}{{ ivalue }}{% if ivalue is not number %}"{% endif %};
+      {%       endfor %}
+      {%     else %}
         {{ key }} = {% if value is not number %}"{% endif %}{{ value }}{% if value is not number %}"{% endif %};
-      {% endfor %}
+      {%     endif %}
+      {%   endfor %}
+      {% endif %}
       }
 
 # vnet.interface = "{{ hostvars[jailname].jail.inet }}b";
@@ -97,24 +94,45 @@
       sysrc ifconfig_e{{ loop.index0 }}b_{{ jailname }}="{{ network }}"
       {% endfor %}
       sysrc defaultrouter={{ jailcfg.defaultrouter }}
-      echo "{{ hostvars[jailname].get('ansible_user', jail.user) }}:{{ hostvars[jailname].get('ansible_user_uid','') }}:{{ hostvars[jailname].get('ansible_user_uid','') }}::::{{ hostvars[jailname].get('ansible_user_gecos','') }}:::" | adduser -w no -f -
+      {% set juser = hostvars[jailname].get('ansible_user', jail.user) %}
+      {% set juid  = hostvars[jailname].get('ansible_user_uid','') %}
+      {% set jgecos = hostvars[jailname].get('ansible_user_gecos','') %}
+      echo "{{ juser }}:{{ juid }}:::::{{ jgecos }}:::" | adduser -w no -f -
       pkg install -y sudo
-      echo "{{ hostvars[jailname].get('ansible_user', jail.user) }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ hostvars[jailname].get('ansible_user', jail.user) }}
-      install -d -m 700 /home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh
-      echo "{{ jail.ssh_key }}" >/home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh/authorized_keys
-      chown -R {{ hostvars[jailname].get('ansible_user', jail.user) }}:{{ hostvars[jailname].get('ansible_user', jail.user) }} /home/{{ hostvars[jailname].get('ansible_user', jail.user) }}/.ssh
+      echo "{{ juser }} ALL=(ALL) NOPASSWD: ALL" >/usr/local/etc/sudoers.d/{{ juser }}
+      install -d -m 700 /home/{{ juser }}/.ssh
+      echo "{{ jail.ssh_key }}" >/home/{{ juser }}/.ssh/authorized_keys
+      chown -R {{ juser }}:{{ juser }} /home/{{ juser }}/.ssh
 
 - name: bsdinstall jails # noqa command-instead-of-shell
   # You can't pass environemtn variables using the command module
   shell: bsdinstall jail "{{ jail.root.mountpoint }}/{{ jailname }}"
   environment:
     SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
+    BSDINSTALL_DISTSITE: "{{ jail.mirror | default('http://ftp.freebsd.org/') | trim('/') }}/pub/FreeBSD/releases/{{ ansible_machine }}/{{ ansible_architecture }}/{{ ansible_distribution_release }}" # noqa yaml[line-length]
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/bin"
 
+- name: create directories for mount on host side # noqa risky-file-permissions
+  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
+  file:
+    path: "{{ item[0] if item is iterable and item is not string else item }}"
+    state: directory
+  loop: "{{ jailcfg.mounts }}"
+  when: jailcfg.mounts is defined
+
+- name: create directories for mount on jail side # noqa risky-file-permissions
+  # NB.: The directory ownership and permissions could be anything. It should not be hardcoded at this point
+  file:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}{{ item[1] if item is iterable and item is not string else item }}"
+    state: directory
+  loop: "{{ jailcfg.mounts }}"
+  when: jailcfg.mounts is defined
+
 - name: network in the jail
   community.general.sysrc:
-    jail: "{{ jailname }}"
+    # jail: parameter works only, if the jail is running. This way, it's 100% sure, the change happens
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/rc.conf"
     name: "ifconfig_e{{ index0 }}b_{{ jailname }}"
     value: "{{ item }}"
     state: present
@@ -129,7 +147,9 @@
     owner: root
     group: 0
     content: |
+      {% if jailcfg.ns_search is defined %}
       search {{ jailcfg.ns_search }}
+      {% endif %}
       {% if jailcfg.ns_server is iterable and jailcfg.ns_server is not string %}
       {% for ns in jailcfg.ns_server %}
       nameserver {{ ns }}
@@ -137,3 +157,10 @@
       {% else %}
       nameserver {{ jailcfg.ns_server }}
       {% endif %}
+
+- name: add/remove jail to autostart list if needed
+  community.general.sysrc:
+    name: jail_list
+    value: "{{ jailname }}"
+    state: "{{ 'value_present' if jailcfg.autostart else 'value_absent' }}"
+  when: jailcfg.autostart is defined

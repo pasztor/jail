@@ -17,7 +17,7 @@
   blockinfile:
     path: /etc/jail.conf
     mode: 0644
-    create: yes
+    create: yes # noqa yaml[truthy]
     marker: "# {mark} ANSIBLE MANAGED: default"
     block: |
       path = "{{ jail.root.mountpoint }}/$name";
@@ -49,7 +49,7 @@
   copy:
     src: /usr/share/examples/jails/jib
     dest: /usr/local/sbin/
-    remote_src: yes
+    remote_src: yes # noqa yaml[truthy]
     mode: 0755
 
 - name: iterate through jails on this host
@@ -59,3 +59,9 @@
   loop_control:
     loop_var: jailname
   when: hostvars[jailname].get('jail', {}).get('parent', ansible_host) == ansible_host
+
+- name: enable jail service
+  community.general.sysrc:
+    name: jail_enable
+    value: 'YES'
+    state: present

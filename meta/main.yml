@@ -42,7 +42,8 @@ galaxy_info:
   platforms:
     - name: FreeBSD
       versions:
-        - 13.0
+        - 13.0 # noqa schema
+        - 13.1 # noqa schema
 
   galaxy_tags:
     - freebsd

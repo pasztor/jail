@@ -55,15 +55,6 @@ index ecfbb78357d9..d3a84f872fb6 100755
  fi
  
  FETCH_DISTRIBUTIONS=""
-@@ -95,7 +103,7 @@ FETCH_DISTRIBUTIONS=`echo $FETCH_DISTRIBUTIONS`	# Trim white space
- 
- if [ -n "$FETCH_DISTRIBUTIONS" -a -z "$BSDINSTALL_DISTSITE" ]; then
- 	exec 3>&1
--	BSDINSTALL_DISTSITE=`bsdinstall mirrorselect 2>&1 1>&3`
-+	BSDINSTALL_DISTSITE=$(`dirname $0`/mirrorselect 2>&1 1>&3)
- 	MIRROR_BUTTON=$?
- 	exec 3>&-
- 	test $MIRROR_BUTTON -eq 0 || error "No mirror selected"
 @@ -108,19 +116,38 @@ fi
  
  bsdinstall checksum || error "Distribution checksum failed"
