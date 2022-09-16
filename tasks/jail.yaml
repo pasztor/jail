@@ -88,10 +88,10 @@
       DISTRIBUTIONS="base.txz"
       export nonInteractive="YES"
       #!/bin/sh
-      pkg install -y {{ jail.python | default('python3') }}
+      IGNORE_OSVERSION=yes pkg install -y {{ jail.python | default('python') }}
       sysrc sshd_enable="YES"
-      {% for network in jailcfg.inet %}
-      sysrc ifconfig_e{{ loop.index0 }}b_{{ jailname }}="{{ network }}"
+      {% for network in jailcfg.inet | jail_net_conf(jailname) %}
+      sysrc ifconfig_{{ network.ifname }}="{{ network.ifconf }}"
       {% endfor %}
       sysrc defaultrouter={{ jailcfg.defaultrouter }}
       {% set juser = hostvars[jailname].get('ansible_user', jail.user) %}
@@ -109,7 +109,7 @@
   shell: bsdinstall jail "{{ jail.root.mountpoint }}/{{ jailname }}"
   environment:
     SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
-    BSDINSTALL_DISTSITE: "{{ jail.mirror | default('http://ftp.freebsd.org/') | trim('/') }}/pub/FreeBSD/releases/{{ ansible_machine }}/{{ ansible_architecture }}/{{ ansible_distribution_release }}" # noqa yaml[line-length]
+    BSDINSTALL_DISTSITE: "{{ jail.mirror | default('http://ftp.freebsd.org/') | trim('/') }}/pub/FreeBSD/releases/{{ ansible_machine }}/{{ ansible_architecture }}/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}" # noqa yaml[line-length]
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/bin"
 
@@ -129,16 +129,14 @@
   loop: "{{ jailcfg.mounts }}"
   when: jailcfg.mounts is defined
 
-- name: network in the jail
+- name: setup network when jail is already running
   community.general.sysrc:
     # jail: parameter works only, if the jail is running. This way, it's 100% sure, the change happens
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/rc.conf"
-    name: "ifconfig_e{{ index0 }}b_{{ jailname }}"
-    value: "{{ item }}"
+    name: "ifconfig_{{ item.ifname }}"
+    value: "{{ item.ifconf }}"
     state: present
-  with_items: "{{ jailcfg.inet }}"
-  loop_control:
-    index_var: index0
+  loop: "{{ jailcfg.inet | jail_net_conf(jailname) }}"
 
 - name: name resolution in jail
   copy:

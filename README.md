@@ -64,7 +64,7 @@ jail:
     - re0.101
     - re0.102
   inet:
-    - inet 10.0.0.1 netmask 255.255.255.0
+    - [ 'inet 10.0.0.2 netmask 255.255.255.0', 'inet vhid 10 pass SecreT123 advskew 8 alias 10.0.0.1/24']
     - inet 10.0.1.1 netmask 255.255.255.0
   defaultrouter: 10.0.0.254
   ns_search: srv.intra dmz.intra
