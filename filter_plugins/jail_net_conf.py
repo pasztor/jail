@@ -13,6 +13,9 @@ def jail_net_conf (inets, hostname):
             for alias in inet[1:]:
                 ret.append(dict( ifname = f'e{ ifindex }b_{ hostname }_alias{ aliasindex }', ifconf = alias))
                 aliasindex += 1
+        elif isinstance(inet, dict):
+            ret.append(inet)
+            continue
         ifindex += 1
     return ret
 
