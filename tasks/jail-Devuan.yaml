@@ -1,0 +1,203 @@
+- name: install debootstrap if neccesary
+  package:
+    name:
+      - debootstrap
+    state: present
+
+- name: run first stage of debootstrap
+  command: "debootstrap --foreign --no-merged-usr --exclude=usr-is-merged --arch={{ ansible_architecture }} {{ jailcfg.osver|default('ascii') }} {{ jail.root.mountpoint }}/{{ jailname }} {{ jailcfg.mirror | default('http://deb.devuan.org/merged/') }}"
+  args:
+    creates: "{{ jail.root.mountpoint }}/{{ jailname }}/etc"
+
+- name: check if still need the second stage
+  stat:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap"
+  register: debootstrap_stat
+
+- name: check if second stage is actually over and should skip on third stage
+  stat:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/third_stage"
+  register: dbs_third
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: patch debootstrap for second stage
+  command: "ed {{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/debootstrap"
+  #command: "cat"
+  args:
+    stdin: |
+      /TARGET" = "\/"
+      i
+      HOST_OS="freebsd"
+      HOST_ARCH="{{ ansible_architecture }}"
+
+      .
+      w
+    stdin_add_newline: yes
+  register:
+    patch_debootstrap
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir and not dbs_third.stat.exists
+
+- name: create /usr/local/bin
+  file:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin"
+    state: directory
+
+- name: create bash symlink for debootstrap second stage
+  file:
+    src: /bin/bash
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/bash"
+    state: link
+    force: yes   # may the force be with you
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: create grep symlink for debootstrap second stage
+  file:
+    src: /bin/grep
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/grep"
+    state: link
+    force: yes   # may the force be with you
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: mount linprocfs
+  mount:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/proc"
+    src: linprocfs
+    fstype: linprocfs
+    opts: rw,late
+    fstab: "/etc/fstab.{{ jailname }}"
+    state: mounted
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: mount linsysfs
+  mount:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/sys"
+    src: linsysfs
+    fstype: linsysfs
+    opts: rw,late
+    fstab: "/etc/fstab.{{ jailname }}"
+    state: mounted
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: mount tmpfs
+  mount:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/tmp"
+    src: tmpfs
+    fstype: tmpfs
+    opts: rw,late,mode=1777
+    fstab: "/etc/fstab.{{ jailname }}"
+    state: mounted
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: run second stage 
+  command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/debootstrap --second-stage"
+  register: second_stage
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir and not dbs_third.stat.exists
+  failed_when: false
+
+- name: copy systems resolv.conf for this stage
+  copy:
+    src: /etc/resolv.conf
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/resolv.conf"
+    remote_src: yes
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: raise apt limits
+  copy:
+    dest: "{{jail.root.mountpoint}}/{{ jailname }}/etc/apt/apt.conf.d/20archive"
+    content: |
+      APT::Cache-Limit "100000000";
+      APT::Cache-Start "100000000";
+
+- name: prepare a third stage
+  copy:
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/third_stage"
+    mode: '0755'
+    owner: root
+    group: wheel
+    content: |
+      #!/bin/bash
+      exec >>/debootstrap/third_stage.log 2>&1
+      dpkg -l || cp /var/lib/dpkg/status-old /var/lib/dpkg/status
+      dpkg --configure --pending
+      if !  dpkg -i /var/cache/apt/archives/*.deb ; then
+        dpkg --configure --pending
+        dpkg -i /var/cache/apt/archives/init_*.deb
+      fi
+      apt update
+      apt install -y syslog-ng-core ed
+      cat <<END | ed /etc/syslog-ng/syslog-ng.conf
+      /system
+      s/^/#/
+      /internal
+      i
+      unix-stream("/var/lib/misc/log");
+      .
+      w
+      END
+      dpkg --purge rsyslog
+      dpkg --configure --pending
+      apt install -y ssh
+      ln -s ../init.d/networking /etc/rc3.d/S01networking
+      update-rc.d networking enable
+      {% set juser = hostvars[jailname].get('ansible_user', jail.user) %}
+      {% set jgecos = hostvars[jailname].get('ansible_user_gecos','') %}
+      adduser --disabled-password --gecos "{{ jgecos }}" {{ juser }}
+      apt install sudo
+      echo "{{ juser }} ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/{{ juser }}
+      install -d -m 700 /home/{{ juser }}/.ssh
+      echo "{{ jail.ssh_key }}" >/home/{{ juser }}/.ssh/authorized_keys
+      chown -R {{ juser }}:{{ juser }} /home/{{ juser }}/.ssh
+      mv /debootstrap /var/log/debootstrap
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: setup jail loopback network interface
+  blockinfile:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/network/interfaces"
+    mode: 0644
+    create: yes # noqa yaml[truthy]
+    marker: "# {mark} ANSIBLE MANAGED: lo0"
+    block: |
+      auto lo0
+      iface lo0 inet manual
+        up /native/bin/ifconfig lo0 inet 127.0.0.1 netmask 255.0.0.0
+        down /native/bin/ifconfig lo0 down
+
+- name: stup jails network interfaces config
+  blockinfile:
+    path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/network/interfaces"
+    mode: 0644
+    create: yes # noqa yaml[truthy]
+    marker: "# {mark} ANSIBLE MANAGED: {{ item.ifname }}"
+    block: |
+      auto {{ item.ifname }}
+      iface {{ item.ifname }} inet manual
+        up /native/bin/ifconfig {{ item.ifname }} {{ item.ifconf }}
+      {% if ansible_loop.first %}
+        up /native/bin/route add default {{ jailcfg.defaultrouter }}
+      {% endif %}
+        down /native/bin/ifconfig {{ item.ifname }} down
+  with_items: "{{ jailcfg.inet | jail_net_conf(jailname) }}"
+  loop_control:
+    extended: yes
+
+- name: run third stage 
+  command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/third_stage"
+  register: third_stage
+  when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+
+- name: clean up bash symlink
+  file:
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/bash"
+    state: absent
+  when: second_stage is defined or debootstrap_stat.stat.isdir is not defined
+
+- name: clean up grep symlink
+  file:
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/grep"
+    state: absent
+  when: second_stage is defined or debootstrap_stat.stat.isdir is not defined
+
+- name: copy native binaries in order to be able to start network on boot
+  command: "/usr/local/sbin/linjailsetup {{ jail.root.mountpoint }} {{ jailname }}"
+  args:
+    creates: "{{ jail.root.mountpoint }}/{{ jailname }}/native"

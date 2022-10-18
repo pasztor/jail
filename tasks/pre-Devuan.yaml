@@ -1,0 +1,7 @@
+- name: set jail os related facts
+  set_fact:
+    jailcfg_os: |
+      mount.fstab = "/etc/fstab.{{ jailname }}";
+      exec.poststart += "ln -fsn /var/lib/misc/log /jails/{{ jailname }}/dev/log";
+      exec.start = "/etc/init.d/rc 3";
+      exec.stop = "/etc/init.d/rc 0";

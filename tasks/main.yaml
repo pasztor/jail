@@ -45,11 +45,17 @@
     strip: 4
   when: scripted_jail.rc != 0
 
-- name: install jib script
+- name: install jib static script
   copy:
-    src: /usr/share/examples/jails/jib
+    src: jibs
     dest: /usr/local/sbin/
-    remote_src: yes # noqa yaml[truthy]
+    #remote_src: yes # noqa yaml[truthy]
+    mode: 0755
+
+- name: install linjailsetup script
+  copy:
+    src: linjailsetup
+    dest: /usr/local/sbin
     mode: 0755
 
 - name: iterate through jails on this host

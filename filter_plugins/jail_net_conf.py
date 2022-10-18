@@ -1,6 +1,33 @@
 import json
 import sys
 
+'''
+Generates a dict which is simply usable in interface configuration templates
+input:
+    inets:
+          - inet 10.1.2.3 netmask 255.255.255.0
+          - - 'inet 10.1.3.2 netmask 255.255.255.0'
+            - 'inet vhid 11 pass secret advskew 1 alias 10.1.3.1/24'
+          - ifname: epair1b
+            ifconf: '10.1.4.2 netmask 255.255.255.0'
+          - ifname: epair1b_alias0
+            ifconf: 'inet vhid 10 pass secret advskew 1 alias 10.1.4.1/24'
+    hostname: 'foo'
+
+output: 
+    - ifname: e0b_foo
+      ifconf: inet 10.1.2.3 netmask 255.255.255.0
+    - ifname: e1b_foo
+      ifconf: inet 10.1.3.2 netmask 255.255.255.0
+    - ifname: e1b_foo_alias0
+      ifconf: inet vhid 11 pass secret advskew 1 alias 10.1.3.1/24
+    - ifname: epair1b
+      ifconf: '10.1.4.2 netmask 255.255.255.0'
+    - ifname: epair1b_alias0
+      ifconf: 'inet vhid 10 pass secret advskew 1 alias 10.1.4.1/24'
+
+'''
+
 def jail_net_conf (inets, hostname):
     ret = []
     ifindex = 0

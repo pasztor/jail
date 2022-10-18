@@ -1,0 +1,3 @@
+- name: set jail os related facts
+  set_fact:
+    jailcfg_os: ''

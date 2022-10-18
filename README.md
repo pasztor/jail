@@ -46,13 +46,15 @@ If the jail configuration has a `parent` key defined, and the value of the given
 
 Possible variables for the jails:
 - `parent`: Which `ansible_host` is the host of this jail. default: the host we are running steps on.
-- `vnet`: A string or list of interface names which will have a bridge with the jails epair interface
+- `vnet`: A string or list of bridge names which will it add an epair interface to
 - `inet`: network configuration line (or lines) of the interfaces of the epair interfaces. This goes right away to the jail's rc.conf into the respective line or lines. N.B. If an array of interfaces are defined, than vnet[0]'s inet config within the jail is inet[0], and so on...
 - `defaultrouter`: defaultrouter of the jail
 - `ns_search`: This string will be appeneded after the `search` keyword in the guest's resolv.conf
 - `ns_server`: ip, or list of ips of nameservers for the jail.
 - `mounts`: list of mount points. A list element is either a simple directory name. In this case the directory must be the same on the host and within the jail. Or a list of two elements: the directory name on the host, and the directory name, how you can see it within the jail. Prefix of the jail's root must be omited.
 - `custom`: custom jail configurations can be added here, eg. enabling sysv ipc.
+- `os`: Can be `FreeBSD` or `Devuan` so far. If not defined, the default is `FreeBSD`
+- `osver`: In case you want to install a devuan into a jail, the release name of the distro. NB.: I've only tested this with ascii just yet.
 
 There is one important configuration item in the jails' hostconfig: the `ansible_user`. With this you can override the username from the host's configuration on a per-jail basis.
 
@@ -61,8 +63,8 @@ example jail's host vars (e.g.: `host_vars/beelzebub.yaml`) :
 jail:
   parent: beastie
   vnet:
-    - re0.101
-    - re0.102
+    - vm-foo
+    - vm-bar
   inet:
     - [ 'inet 10.0.0.2 netmask 255.255.255.0', 'inet vhid 10 pass SecreT123 advskew 8 alias 10.0.0.1/24']
     - inet 10.0.1.1 netmask 255.255.255.0
@@ -85,7 +87,7 @@ jail:
 ansible_user: pasztor
 ```
 
-alternatively, when vm-bhyve is already used, and you have to add an interface to an already created vm-switch:
+alternatively, when if you want to manage the interface addition and removeal manually in the prestart and poststop scripts
 ```
 jail:
   parent: beastie
@@ -113,6 +115,23 @@ jail:
 ansible_user: pasztor
 ```
 
+Example devuan host `host_vars` file:
+```
+jail:
+  parent: beastie
+  os: Devuan
+  quota: 5G
+  vnet:
+    - vm-srv
+  inet:
+    - 10.1.1.11 netmask 255.255.255.0
+  defaultrouter: 10.1.1.1
+  ns_search: srv.intra dmz.intra intra
+  ns_server:
+    - 10.1.1.1
+    - 10.1.0.1
+```
+As you can see from the example, it uses the bridge preconfigured by vm-bhyve.
 
 example inventory file:
 ```
@@ -121,6 +140,7 @@ beastie
 
 [beastie_jails]
 beelzebub
+devuan
 ```
 
 Tags
@@ -160,3 +180,6 @@ Most of the idea and hints are coming from this tutorial:
 - https://eoli3n.eu.org/2021/06/08/jails-part-1.html
 - https://eoli3n.eu.org/2021/06/09/jails-part-2.html
 - https://eoli3n.eu.org/2021/06/14/jails-part-3.html
+
+Ideas for devuan installation is coming from here:
+https://forums.freebsd.org/threads/setting-up-a-debian-linux-jail-on-freebsd.68434/

@@ -1,0 +1,72 @@
+#!/bin/sh
+#-
+# Copyright (c) 2022 PASZTOR Gyorgy
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+# $FreeBSD$
+
+#set -x
+
+jailroot="$1"
+_name="$2"
+
+_path=$jailroot/$_name
+
+mkdir $_path/native $_path/native/bin $_path/native/lib $_path/libexec
+
+cp /libexec/ld-elf* $_path/libexec
+
+: >$_path/etc/libmap.conf
+for i in /lib /usr/lib /usr/local/lib ; do
+  printf '%s /native/lib\n' "$i" >>$_path/etc/libmap.conf
+done
+
+lddcopy () {
+  local _elf
+  _elf=$1
+  for i in `ldd -f '%p\n' $_elf` ; do
+    cp $i $_path/native/lib
+  done
+}
+
+for elf in /usr/bin/netstat /sbin/ifconfig /sbin/route /usr/sbin/arp /sbin/ping ; do
+  lddcopy $elf
+  cp $elf $_path/native/bin
+done
+
+cat <<END >/etc/fstab.$_name
+## Mountpoint(s) for the Devuan jail
+# Dev   Mountpoint      FS              Options         Dump / Check
+linprocfs       $_path/proc  linprocfs       rw,late 0 0
+linsysfs        $_path/sys   linsysfs        rw,late 0 0
+tmpfs           $_path/tmp   tmpfs   rw,late,mode=1777 0 0
+END
+
+echo "root::0:0::0:0:Charlie &:/root:/bin/bash" > $_path/etc/master.passwd
+pwd_mkdb -d $_path/etc/  $_path/etc/master.passwd
+
+# umount supplementary filesystems from under jaildir
+while mount | cut -w -f 3 | grep -q ^$_path/ ; do
+	umount `mount | cut -w -f 3 | grep ^$_path/ | tail -1 `
+done
