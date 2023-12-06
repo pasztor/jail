@@ -5,7 +5,7 @@
     state: present
 
 - name: run first stage of debootstrap
-  command: "debootstrap --foreign --no-merged-usr --exclude=usr-is-merged --arch={{ ansible_architecture }} {{ jailcfg.osver|default('ascii') }} {{ jail.root.mountpoint }}/{{ jailname }} {{ jailcfg.mirror | default('http://deb.devuan.org/merged/') }}"
+  command: "debootstrap --foreign --no-merged-usr --exclude=usr-is-merged --arch={{ ansible_architecture }} {{ jailcfg.osver|default('ascii') }} {{ jail.root.mountpoint }}/{{ jailname }} {{ jailcfg.mirror | default('http://deb.devuan.org/merged/') }} {{ script_version_overrides[jailcfg.osver | default('default') ] }}"
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/etc"
 

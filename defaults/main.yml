@@ -1,2 +1,7 @@
 ---
 # defaults file for jail
+script_version_overrides:
+  default: ascii
+  beowulf: sid
+  chimaera: sid
+  daedalus: sid
