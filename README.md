@@ -150,7 +150,6 @@ Rest of the tasks don't have any tags. Though at certain points for debug reason
 
 If you only provide the ``--tags debug`` to ansible-playbook, than no task will run. In order to run the usual steps and the debug tags, you should use the ``--tags all,debug`` parameters to allow these debug steps to run.
 
-
 Dependencies
 ------------
 
