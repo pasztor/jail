@@ -59,7 +59,7 @@ galaxy_info:
     #       Maximum 20 tags per role.
 
 dependencies:
-  - name: community.general
+  - name: community.general.zfs
     src: https://github.com/ansible-collections/community.general
     scm: git
   # List your role dependencies here, one per line. Be sure to remove the '[]' above,
