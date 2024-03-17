@@ -1,28 +1,27 @@
-- name: install debootstrap if neccesary
-  package:
+- name: Install debootstrap if neccesary
+  ansible.builtin.package:
     name:
       - debootstrap
     state: present
 
-- name: run first stage of debootstrap
-  command: "debootstrap --foreign --no-merged-usr --exclude=usr-is-merged --arch={{ ansible_architecture }} {{ jailcfg.osver|default('ascii') }} {{ jail.root.mountpoint }}/{{ jailname }} {{ jailcfg.mirror | default('http://deb.devuan.org/merged/') }} {{ script_version_overrides[jailcfg.osver | default('default') ] }}"
+- name: Run first stage of debootstrap
+  ansible.builtin.command: "debootstrap --foreign --no-merged-usr --exclude=usr-is-merged --arch={{ ansible_architecture }} {{ jailcfg.osver | default('ascii') }} {{ jail.root.mountpoint }}/{{ jailname }} {{ jailcfg.mirror | default('http://deb.devuan.org/merged/') }} {{ script_version_overrides[jailcfg.osver | default('default')] }}" # noqa yaml[line-length]
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/etc"
 
-- name: check if still need the second stage
-  stat:
+- name: Check if still need the second stage
+  ansible.builtin.stat:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap"
   register: debootstrap_stat
 
-- name: check if second stage is actually over and should skip on third stage
-  stat:
+- name: Check if second stage is actually over and should skip on third stage
+  ansible.builtin.stat:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/third_stage"
   register: dbs_third
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: patch debootstrap for second stage
-  command: "ed {{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/debootstrap"
-  #command: "cat"
+- name: Patch debootstrap for second stage
+  ansible.builtin.command: "ed {{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/debootstrap"
   args:
     stdin: |
       /TARGET" = "\/"
@@ -32,34 +31,36 @@
 
       .
       w
-    stdin_add_newline: yes
+    stdin_add_newline: true
   register:
     patch_debootstrap
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir and not dbs_third.stat.exists
+  changed_when: patch_debootstrap.rc == 0
 
-- name: create /usr/local/bin
-  file:
+- name: Create /usr/local/bin
+  ansible.builtin.file:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin"
+    mode: '0755'
     state: directory
 
-- name: create bash symlink for debootstrap second stage
-  file:
+- name: Create bash symlink for debootstrap second stage
+  ansible.builtin.file:
     src: /bin/bash
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/bash"
     state: link
-    force: yes   # may the force be with you
+    force: true
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: create grep symlink for debootstrap second stage
-  file:
+- name: Create grep symlink for debootstrap second stage
+  ansible.builtin.file:
     src: /bin/grep
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/grep"
     state: link
-    force: yes   # may the force be with you
+    force: true
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: mount linprocfs
-  mount:
+- name: Mount linprocfs
+  ansible.posix.mount:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/proc"
     src: linprocfs
     fstype: linprocfs
@@ -68,8 +69,8 @@
     state: mounted
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: mount linsysfs
-  mount:
+- name: Mount linsysfs
+  ansible.posix.mount:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/sys"
     src: linsysfs
     fstype: linsysfs
@@ -78,8 +79,8 @@
     state: mounted
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: mount tmpfs
-  mount:
+- name: Mount tmpfs
+  ansible.posix.mount:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/tmp"
     src: tmpfs
     fstype: tmpfs
@@ -88,28 +89,31 @@
     state: mounted
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: run second stage 
-  command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/debootstrap --second-stage"
+- name: Run second stage
+  ansible.builtin.command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/debootstrap --second-stage"
   register: second_stage
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir and not dbs_third.stat.exists
   failed_when: false
+  changed_when: second_stage.rc == 0
 
-- name: copy systems resolv.conf for this stage
-  copy:
+- name: Copy systems resolv.conf for this stage
+  ansible.builtin.copy:
     src: /etc/resolv.conf
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/resolv.conf"
-    remote_src: yes
+    mode: '0644'
+    remote_src: true
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: raise apt limits
-  copy:
-    dest: "{{jail.root.mountpoint}}/{{ jailname }}/etc/apt/apt.conf.d/20archive"
+- name: Raise apt limits
+  ansible.builtin.copy:
+    dest: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/apt/apt.conf.d/20archive"
+    mode: '0644'
     content: |
       APT::Cache-Limit "100000000";
       APT::Cache-Start "100000000";
 
-- name: prepare a third stage
-  copy:
+- name: Prepare a third stage
+  ansible.builtin.copy:
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/debootstrap/third_stage"
     mode: '0755'
     owner: root
@@ -140,7 +144,7 @@
       ln -s ../init.d/networking /etc/rc3.d/S01networking
       update-rc.d networking enable
       {% set juser = hostvars[jailname].get('ansible_user', jail.user) %}
-      {% set jgecos = hostvars[jailname].get('ansible_user_gecos','') %}
+      {% set jgecos = hostvars[jailname].get('ansible_user_gecos', '') %}
       adduser --disabled-password --gecos "{{ jgecos }}" {{ juser }}
       apt install sudo
       echo "{{ juser }} ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/{{ juser }}
@@ -150,11 +154,11 @@
       mv /debootstrap /var/log/debootstrap
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
 
-- name: setup jail loopback network interface
-  blockinfile:
+- name: Setup jail loopback network interface
+  ansible.builtin.blockinfile:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/network/interfaces"
-    mode: 0644
-    create: yes # noqa yaml[truthy]
+    mode: '0644'
+    create: true
     marker: "# {mark} ANSIBLE MANAGED: lo0"
     block: |
       auto lo0
@@ -162,11 +166,11 @@
         up /native/bin/ifconfig lo0 inet 127.0.0.1 netmask 255.0.0.0
         down /native/bin/ifconfig lo0 down
 
-- name: stup jails network interfaces config
-  blockinfile:
+- name: Setup jails network interfaces config
+  ansible.builtin.blockinfile:
     path: "{{ jail.root.mountpoint }}/{{ jailname }}/etc/network/interfaces"
-    mode: 0644
-    create: yes # noqa yaml[truthy]
+    mode: '0644'
+    create: true
     marker: "# {mark} ANSIBLE MANAGED: {{ item.ifname }}"
     block: |
       auto {{ item.ifname }}
@@ -178,26 +182,27 @@
         down /native/bin/ifconfig {{ item.ifname }} down
   with_items: "{{ jailcfg.inet | jail_net_conf(jailname) }}"
   loop_control:
-    extended: yes
+    extended: true
 
-- name: run third stage 
-  command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/third_stage"
+- name: Run third stage
+  ansible.builtin.command: "chroot {{ jail.root.mountpoint }}/{{ jailname }} /debootstrap/third_stage"
   register: third_stage
   when: debootstrap_stat.stat.isdir is defined and debootstrap_stat.stat.isdir
+  changed_when: true
 
-- name: clean up bash symlink
-  file:
+- name: Clean up bash symlink
+  ansible.builtin.file:
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/bash"
     state: absent
   when: second_stage is defined or debootstrap_stat.stat.isdir is not defined
 
-- name: clean up grep symlink
-  file:
+- name: Clean up grep symlink
+  ansible.builtin.file:
     dest: "{{ jail.root.mountpoint }}/{{ jailname }}/usr/local/bin/grep"
     state: absent
   when: second_stage is defined or debootstrap_stat.stat.isdir is not defined
 
-- name: copy native binaries in order to be able to start network on boot
-  command: "/usr/local/sbin/linjailsetup {{ jail.root.mountpoint }} {{ jailname }}"
+- name: Copy native binaries in order to be able to start network on boot
+  ansible.builtin.command: "/usr/local/sbin/linjailsetup {{ jail.root.mountpoint }} {{ jailname }}"
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/native"

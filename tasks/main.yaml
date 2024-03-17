@@ -1,22 +1,22 @@
-- name: jail root dataset
-  zfs:
+- name: Jail root dataset
+  community.general.zfs:
     name: "{{ jail.root.dataset }}"
     state: present
     extra_zfs_properties:
       mountpoint: "{{ jail.root.mountpoint }}"
 
-- name: templates directory
-  file:
+- name: Templates directory
+  ansible.builtin.file:
     path: "{{ jail.root.mountpoint }}/.template"
     state: directory
     owner: root
     group: 0
-    mode: 0700
+    mode: '0700'
 
-- name: jail.conf generic part
-  blockinfile:
+- name: Manage jail.conf generic part
+  ansible.builtin.blockinfile:
     path: /etc/jail.conf
-    mode: 0644
+    mode: '0644'
     create: yes # noqa yaml[truthy]
     marker: "# {mark} ANSIBLE MANAGED: default"
     block: |
@@ -32,41 +32,41 @@
       host.hostname = "$name";
 
 
-- name: check if automated jail install is already available in bsdinstall jail script
-  command: "grep SCRIPT /usr/libexec/bsdinstall/jail"
+- name: Check if automated jail install is already available in bsdinstall jail script
+  ansible.builtin.command: "grep SCRIPT /usr/libexec/bsdinstall/jail"
   register: scripted_jail
   ignore_errors: true
   changed_when: false
 
-- name: patch jail bsdinstall-subcommand if needed
+- name: Patch jail bsdinstall-subcommand if needed
   ansible.posix.patch:
     src: jail.patch
     basedir: /usr/libexec/bsdinstall
     strip: 4
   when: scripted_jail.rc != 0
 
-- name: install jib static script
-  copy:
+- name: Install jib static script
+  ansible.builtin.copy:
     src: jibs
     dest: /usr/local/sbin/
-    #remote_src: yes # noqa yaml[truthy]
-    mode: 0755
+    # remote_src: yes # noqa yaml[truthy]
+    mode: '0755'
 
-- name: install linjailsetup script
-  copy:
+- name: Install linjailsetup script
+  ansible.builtin.copy:
     src: linjailsetup
     dest: /usr/local/sbin
-    mode: 0755
+    mode: '0755'
 
-- name: iterate through jails on this host
-  include_tasks: jail.yaml
+- name: Iterate through jails on this host
+  ansible.builtin.include_tasks: jail.yaml
   with_inventory_hostnames:
     - "{{ jail.child_group }}"
   loop_control:
     loop_var: jailname
   when: hostvars[jailname].get('jail', {}).get('parent', ansible_host) == ansible_host
 
-- name: enable jail service
+- name: Enable jail service
   community.general.sysrc:
     name: jail_enable
     value: 'YES'
