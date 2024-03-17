@@ -1,0 +1,11 @@
+branches:
+  - main
+plugins:
+  - - "@semantic-release/commit-analyzer"
+    - releaseRules:
+      - message: '*'
+        release: patch
+  - - "@semantic-release/git"
+    - assets: []
+  - - "@semantic-release/exec"
+    - publishCmd: "ansible-galaxy role import --token $GALAXY_API_KEY pasztor jail"
