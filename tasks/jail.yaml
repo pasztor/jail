@@ -80,7 +80,7 @@
       {%     endif %}
       {%   endfor %}
       {% endif %}
-      {% if jailcfg.custom is defined %}
+      {% if jailcfg.custom_options is defined %}
       {%   for option in jailcfg.custom_options %}
         {{ option }};
       {%   endfor %}
