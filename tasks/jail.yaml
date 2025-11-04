@@ -80,6 +80,11 @@
       {%     endif %}
       {%   endfor %}
       {% endif %}
+      {% if jailcfg.custom is defined %}
+      {%   for option in jailcfg.custom_options %}
+        {{ option }};
+      {%   endfor %}
+      {% endif %}
       }
 
 # vnet.interface = "{{ hostvars[jailname].jail.inet }}b";
