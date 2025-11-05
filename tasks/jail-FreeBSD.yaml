@@ -22,11 +22,20 @@
       echo "{{ jail.ssh_key }}" >/home/{{ juser }}/.ssh/authorized_keys
       chown -R {{ juser }}:{{ juser }} /home/{{ juser }}/.ssh
 
+- name: Make sure distdir exists
+  ansible.builtin.file:
+    path: "/usr/freebsd-dist/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}"
+    state: directory
+    owner: root
+    group: 0
+    mode: '0755'
+
 - name: Debug envvars
   vars:
     envi:
       SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
       BSDINSTALL_DISTSITE: "{{ jail.mirror | default('http://ftp.freebsd.org/') | trim('/') }}/pub/FreeBSD/releases/{{ ansible_machine }}/{{ ansible_architecture }}/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}" # noqa yaml[line-length]
+      BSDINSTALL_DISTDIR: "/usr/freebsd-dist/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}"
   ansible.builtin.debug:
     var: envi
   tags:
@@ -39,6 +48,7 @@
   environment:
     SCRIPT: "{{ jail.root.mountpoint }}/.template/{{ jailname }}"
     BSDINSTALL_DISTSITE: "{{ jail.mirror | default('http://ftp.freebsd.org/') | trim('/') }}/pub/FreeBSD/releases/{{ ansible_machine }}/{{ ansible_architecture }}/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}" # noqa yaml[line-length]
+    BSDINSTALL_DISTDIR: "/usr/freebsd-dist/{{ ansible_distribution_release | regex_replace('-p\\d+$', '') }}"
   args:
     creates: "{{ jail.root.mountpoint }}/{{ jailname }}/bin"
 
